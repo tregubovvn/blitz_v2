@@ -44,6 +44,10 @@
         <li><b>Кнопка «Пропустить вопрос»: −3 очка,</b> но серия НЕ обрывается —
         удобно, если не знаете ответ и хотите сохранить множитель.</li>
         <li><b>Время вышло / ответа нет: −3 очка,</b> серия обнуляется.</li>
+        <li><b>Бонусы ×2, ×3 и «Время»</b> — на экране ожидания, каждый по одному
+        разу за тест. Заряжаются до показа вопроса и действуют на следующий вопрос:
+        ×2 и ×3 умножают очки за вопрос (в том числе отрицательные), «Время» при
+        верном ответе вычитает 80 с из общего времени.</li>
       </ul>
       <p>Пример: серия 5 верных подряд, осталось 60% времени:
       10 × 2 + 6 = <b>26 очков</b> за вопрос.</p>
@@ -60,6 +64,7 @@
   <section id="panel-personal" class="panel hidden">
     <div class="p-head">
       <span id="p-name" class="p-name"></span>
+      <span id="p-armed" class="chip armed hidden"></span>
     </div>
     <div class="stats">
       <div class="stat accent"><b id="p-points">—</b><span>очки</span></div>
@@ -70,6 +75,18 @@
       <div class="stat"><b id="p-streak">—</b><span>серия</span></div>
     </div>
 
+    <div class="podium-cap">Бонусы — активируйте до показа вопроса, каждый можно использовать один раз</div>
+    <div class="bonuses">
+      <button type="button" class="bonus" data-b="double" id="b-double"><b>×2</b><span>Двойные очки</span></button>
+      <button type="button" class="bonus" data-b="triple" id="b-triple"><b>×3</b><span>Тройные очки</span></button>
+      <button type="button" class="bonus" data-b="time" id="b-time"><b>−80 с</b><span>Запас времени</span></button>
+    </div>
+    <p class="muted" style="font-size:12.5px;margin:8px 0 0">
+      Каждый бонус — один раз за тест, заряжается до показа вопроса и действует на следующий вопрос.
+      ×2 и ×3 умножают очки за вопрос целиком (в плюс и в минус: неверный ответ при ×3 = −21,
+      пропуск или таймаут = −9). «Время» при верном ответе вычитает 80 с из общего времени.
+      Повторное нажатие на заряженный бонус снимает заряд, пока вопрос не показан.
+    </p>
     <div class="podium-cap">Лидеры</div>
     <div class="podium" id="p-podium"></div>
   </section>
@@ -82,6 +99,7 @@
   <section id="sec-question" class="card hidden">
     <p class="muted" id="q-round" style="margin-top:0"></p>
     <h2 id="q-type" style="margin-top:4px"></h2>
+    <div id="q-bonus" class="chip armed hidden" style="margin-top:10px"></div>
     <div class="timerline">
       <div class="ring" id="ring-wrap">
         <svg viewBox="0 0 120 120" aria-hidden="true">

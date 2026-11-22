@@ -26,8 +26,14 @@
      по доле оставшегося времени; неверный — −7 (серия обнуляется);
      «Пропустить вопрос» — −3 (серия сохраняется); таймаут — −3
      (серия обнуляется).
+   — Бонусы студента (×2, ×3, «Время»): заряжаются ДО показа вопроса
+     (каждый — один раз за тест) и действуют на один следующий вопрос.
+     ×2/×3 умножают очки раунда целиком (и награду, и штраф);
+     «Время» при верном ответе вычитает 80 с из общего времени.
    — Таблица результатов показывается ВСЕГДА: между раундами, в панели
      раунда и в финальном экране.
+   — «Завершить тест» доступна ВСЕГДА: если студентов нет, комната
+     просто закрывается и удаляется без записи в статистику.
    ===================================================================== */
 
 const $ = function (id) { return document.getElementById(id); };
@@ -38,7 +44,8 @@ let state = null;              // содержимое rooms/{room}.json
 let students = {};             // sid -> {name}
 const seenStudents = new Map();// файл -> sid (чтобы уметь удалять)
 const seenAnswerFiles = new Set();
-let answersByRound = {};       // номер раунда -> sid -> {name, answer, elapsed, bonus}
+let answersByRound = {};       // номер раунда -> sid -> {name, answer, elapsed, skip}
+let bonusesCache = {};         // sid -> файл бонусов {double, triple, time, used[]}
 let screen = 'stats';
 let roundBoxOn = false;        // встроенная панель раунда показана
 let pollInt = null;
@@ -386,6 +393,7 @@ async function pollStudents() {
       if (d && d.name) {
         students[d.sid || sid] = { name: d.name };
         seenStudents.set(f, d.sid || sid);
+        loadBonus(sid);
       }
     } catch (e) { /* пропускаем битый файл */ }
   }
@@ -412,6 +420,35 @@ async function pollAnswers(n) {
       }
     } catch (e) { /* пропускаем битый файл */ }
   }
+}
+
+/* ---------------- бонусы студентов ----------------
+   Файл bonuses/{room}/{sid}.json: {sid, name, double, triple, time, used[]},
+   где double/triple/time — номер вопроса, на который заряжен бонус,
+   а used — список уже израсходованных. Заряд доступен студенту только
+   до показа вопроса. Преподаватель применяет бонус при проверке раунда
+   и помечает его израсходованным. */
+async function loadBonus(sid) {
+  try {
+    const b = await apiGet('bonuses/' + room + '/' + sid + '.json', auth);
+    if (b && typeof b === 'object') bonusesCache[sid] = b;
+    else delete bonusesCache[sid];
+  } catch (e) { delete bonusesCache[sid]; }
+}
+
+async function refreshBonuses() {
+  await Promise.all(Object.keys(students).map(function (sid) { return loadBonus(sid); }));
+}
+
+/* подпись студента в списке ответов: какие бонусы заряжены на этот раунд */
+function bonusSuffix(sid, n) {
+  const b = bonusesCache[sid];
+  if (!b || n == null) return '';
+  const parts = [];
+  if (+b.triple === n) parts.push('×3');
+  else if (+b.double === n) parts.push('×2');
+  if (+b.time === n) parts.push('«Время»');
+  return parts.length ? ' [' + parts.join(' · ') + ']' : '';
 }
 
 /* ---------------- лобби: студенты, тема, ссылка ---------------- */
@@ -497,7 +534,9 @@ function renderLobby() {
     wrap.classList.add('hidden');
   }
   showRound(roundBoxOn);
-  $('btn-finish').disabled = !(lastResults && Object.keys(lastResults.scores || {}).length > 0);
+  /* завершить тест можно ВСЕГДА, даже если студентов ещё нет:
+     пустая комната закрывается и удаляется без записи в статистику */
+  $('btn-finish').disabled = false;
 }
 
 $('btn-copy').addEventListener('click', async function () {
@@ -585,7 +624,11 @@ function renderRound() {
   // намеренные пропуски (skip) в списке вариантов не показываются —
   // они учтутся автоматически (−3 очка, серия сохраняется)
   const list = Object.keys(ans).filter(function (sid) { return students[sid] && !ans[sid].skip; })
-    .map(function (sid) { return ans[sid]; });
+    .map(function (sid) {
+      const a = ans[sid];
+      a.dispName = a.name + bonusSuffix(sid, curRound);
+      return a;
+    });
 
   if (!list.length) {
     const p = document.createElement('p');
@@ -599,7 +642,7 @@ function renderRound() {
     list.forEach(function (a) {
       const k = String(a.answer);
       if (!groups[k]) groups[k] = { title: k, names: [] };
-      groups[k].names.push(a.name);
+      groups[k].names.push(a.dispName || a.name);
     });
     Object.keys(groups).sort(function (a, b) {
       const d = groups[b].names.length - groups[a].names.length;
@@ -613,7 +656,7 @@ function renderRound() {
   } else {
     // текстовые ответы: нижний регистр + объединение опечаток
     // (расстояние Дамерау—Левенштейна, порог схожести 0.80)
-    textCluster(list.map(function (a) { return { answer: a.answer, name: a.name }; }))
+    textCluster(list.map(function (a) { return { answer: a.answer, name: a.dispName || a.name }; }))
       .sort(function (a, b) { return b.count - a.count; })
       .forEach(function (c) {
         box.appendChild(answerGroupEl('«' + c.title + '»', c.names, function () {
@@ -684,6 +727,8 @@ async function closeRound(correctKey) {
   const n = state.round;
   const dur = state.duration;
   const ansAll = answersByRound[n] || {};
+  // свежие данные бонусов: студент мог зарядить бонус прямо перед проверкой
+  await refreshBonuses();
 
   Object.keys(students).forEach(function (sid) {
     if (!res.scores[sid]) {
@@ -701,10 +746,16 @@ async function closeRound(correctKey) {
     s.streak = +s.streak || 0;
     const a = ansAll[sid];
 
+    /* бонусы студента на этот вопрос: ×2/×3 — множитель всего раунда
+       (и награда, и штраф), «Время» — −80 с при верном ответе */
+    const b = bonusesCache[sid] || null;
+    const mult = b && +b.triple === n ? 3 : (b && +b.double === n ? 2 : 1);
+    const timeBonus = !!(b && +b.time === n);
+
     if (a && a.skip) {
-      // намеренный пропуск: −3 очка, серия сохраняется, время учтено
+      // намеренный пропуск: −3 очка (×множитель), серия сохраняется, время учтено
       s.time += Math.min(+a.elapsed || 0, dur + GRACE_SECONDS);
-      s.points = (s.points || 0) + S_SKIP;
+      s.points = (s.points || 0) + S_SKIP * mult;
       s.skip = (s.skip || 0) + 1;
     } else if (a) {
       // реальный ответ
@@ -715,18 +766,40 @@ async function closeRound(correctKey) {
       if (hit) {
         s.correct++;
         s.streak++;                       // серия включает текущий ответ
-        const earn = S_CORRECT * streakMult(s.streak) + speedBonus(a.elapsed, dur);
+        const earn = (S_CORRECT * streakMult(s.streak) + speedBonus(a.elapsed, dur)) * mult;
         s.points = (s.points || 0) + earn;
+        if (timeBonus) s.time = Math.max(0, s.time - TIME_BONUS_SEC);
       } else {
         s.wrong++;
         s.streak = 0;                     // серия сбрасывается
-        s.points = (s.points || 0) + S_WRONG;
+        s.points = (s.points || 0) + S_WRONG * mult;
       }
     } else {
-      // таймаут / нет ответа: −3 очка, серия сбрасывается
+      // таймаут / нет ответа: −3 очка (×множитель), серия сбрасывается
       s.time += dur + MISS_PENALTY_SEC;
       s.streak = 0;
-      s.points = (s.points || 0) + S_TIMEOUT;
+      s.points = (s.points || 0) + S_TIMEOUT * mult;
+    }
+
+    /* израсходованные бонусы: помечаем used и снимаем заряд на этот
+       вопрос (заодно убираем случайно оставшийся устаревший заряд) */
+    if (b && students[sid]) {
+      let dirty = false;
+      ['double', 'triple', 'time'].forEach(function (k) {
+        const v = +b[k];
+        if (!v) return;
+        if (v === n) {
+          if (!Array.isArray(b.used)) b.used = [];
+          if (b.used.indexOf(k) === -1) b.used.push(k);
+        }
+        if (v <= n) { b[k] = null; dirty = true; }
+      });
+      if (dirty) {
+        b.updated = new Date().toISOString();
+        bonusesCache[sid] = b;
+        apiPut('bonuses/' + room + '/' + sid + '.json', b, auth)
+          .catch(function () { /* повторим при следующей проверке */ });
+      }
     }
   }
 
@@ -807,49 +880,64 @@ function backToLobby() {
 $('btn-finish').addEventListener('click', finish);
 
 async function finish() {
-  if (!confirm('Завершить тест? Результаты будут сохранены в статистику,\n' +
-    'студенты получат свои баллы и места, комната будет закрыта и удалена.')) return;
+  let res = lastResults;
+  if (!res) {
+    try { res = await apiGet('results/' + room + '.json', auth); } catch (e) { /* ещё нет файла */ }
+  }
+  const hasStudents = !!(res && res.scores && Object.keys(res.scores).length);
+  if (!confirm(hasStudents
+    ? 'Завершить тест? Результаты будут сохранены в статистику,\n' +
+      'студенты получат свои баллы и места, комната будет закрыта и удалена.'
+    : 'В комнате нет результатов студентов.\n' +
+      'Комната будет закрыта и удалена БЕЗ записи в статистику.\n\n' +
+      'Завершить тест?')) return;
   const r = room; // фиксируем код: после завершения комната удаляется
   try {
-    const res = lastResults || (await apiGet('results/' + r + '.json', auth)) ||
-      { rounds: [], scores: {} };
-    res.finished = true;
-    res.topic = state.topic || 'Тестирование студентов';
-    res.finishedAt = new Date().toISOString();
-    res.standings = rankFromScores(res.scores || {});
-    res.updated = res.finishedAt;
-    await apiPut('results/' + r + '.json', res, auth);
-    lastResults = res;
+    if (hasStudents) {
+      res.finished = true;
+      res.topic = state.topic || 'Тестирование студентов';
+      res.finishedAt = new Date().toISOString();
+      res.standings = rankFromScores(res.scores || {});
+      res.updated = res.finishedAt;
+      await apiPut('results/' + r + '.json', res, auth);
+      lastResults = res;
 
-    // запись в общую статистику
-    let stats = null;
-    try { stats = await apiGet('stats.json', auth); } catch (e) { /* ещё нет файла */ }
-    if (!Array.isArray(stats)) stats = [];
-    stats.push({
-      date: res.finishedAt,
-      topic: res.topic,
-      room: r,
-      rounds: (res.rounds || []).length,
-      students: res.standings.map(function (row) {
+      // запись в общую статистику
+      let stats = null;
+      try { stats = await apiGet('stats.json', auth); } catch (e) { /* ещё нет файла */ }
+      if (!Array.isArray(stats)) stats = [];
+      stats.push({
+        date: res.finishedAt,
+        topic: res.topic,
+        room: r,
+        rounds: (res.rounds || []).length,
+        students: res.standings.map(function (row) {
+          return {
+            name: row.name, points: row.points, correct: row.correct, wrong: row.wrong,
+            skip: row.skip || 0, streak: row.streak || 0,
+            time: Math.round(row.time), score: row.score, place: row.place, group: row.group
+          };
+        })
+      });
+      await apiPut('stats.json', stats, auth);
+    } else {
+      // пустая комната: результатов нет — только закрываем и удаляем
+      lastResults = null;
+      statsCache = null;
+    }
+
+    // статус done: студенты (если были) прочитают свой балл и место;
+    // вход в комнату после этого закрыт
+    state.status = 'done';
+    if (hasStudents) {
+      state.standings = res.standings.map(function (row) {
         return {
-          name: row.name, points: row.points, correct: row.correct, wrong: row.wrong,
-          skip: row.skip || 0, streak: row.streak || 0,
+          sid: row.sid, name: row.name, points: row.points, correct: row.correct,
+          wrong: row.wrong, skip: row.skip || 0, streak: row.streak || 0,
           time: Math.round(row.time), score: row.score, place: row.place, group: row.group
         };
-      })
-    });
-    await apiPut('stats.json', stats, auth);
-
-    // статус done + итоговая таблица: каждый студент прочитает свой
-    // балл, место и группу (вход в комнату после этого закрыт)
-    state.status = 'done';
-    state.standings = res.standings.map(function (row) {
-      return {
-        sid: row.sid, name: row.name, points: row.points, correct: row.correct,
-        wrong: row.wrong, skip: row.skip || 0, streak: row.streak || 0,
-        time: Math.round(row.time), score: row.score, place: row.place, group: row.group
-      };
-    });
+      });
+    }
     await apiPut('rooms/' + r + '.json', state, auth);
 
     localStorage.removeItem('blitz_teach_room');
@@ -857,15 +945,15 @@ async function finish() {
     show('sec-final');
 
     // даём студентам ~10 секунд прочитать итоги, затем удаляем все
-    // данные комнаты: войти в неё снова будет нельзя до нового создания
-    setTimeout(function () { cleanupRoom(r); }, 10000);
+    // данные комнаты; в пустой комнате студентов нет — удаляем сразу
+    setTimeout(function () { cleanupRoom(r); }, hasStudents ? 10000 : 1500);
   } catch (e) {
     alert('Ошибка: ' + e.message);
   }
 }
 
-/* Полное удаление данных комнаты: профили студентов, ответы, бонусы
-   ( legacy), результаты и сам файл комнаты. */
+/* Полное удаление данных комнаты: профили студентов, ответы, бонусы,
+   результаты и сам файл комнаты. */
 async function cleanupRoom(r) {
   const rm = function (p) { return apiDelete(p, auth).catch(function () { /* нет файла — ок */ }); };
   try {
