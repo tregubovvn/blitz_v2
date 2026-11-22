@@ -17,6 +17,12 @@
    Личная панель (всегда видна): ФИО, очки, верно/неверно, общее
    время, текущее место, текущая серия и тройка лидеров.
 
+   Бонусы (×2, ×3, «Время») заряжаются на экране ожидания ДО показа
+   вопроса: каждый — один раз за тест, действует на следующий вопрос.
+   ×2/×3 умножают очки раунда (в плюс и в минус), «Время» при верном
+   ответе вычитает 80 с из общего времени. Заряд снимается повторным
+   нажатием, пока вопрос не показан.
+
    Обратный отсчёт начинается, когда студент УВИДЕЛ вопрос. Текстовые
    ответы сохраняются в нижнем регистре; близкие по написанию ответы
    (расстояние Дамерау—Левенштейна, схожесть ≥ 0.80) преподавателю
@@ -31,6 +37,7 @@ let room = null;
 let sid = null;
 let name = '';
 let state = null;
+let bonuses = null;        // мой файл бонусов: {double, triple, time, used[]}
 
 let lastShownRound = 0;    // раунд, который сейчас на экране
 let submitted = false;     // ответ на показанный раунд отправлен
@@ -75,6 +82,10 @@ function setRing(pct, low) {
   if (r && !h) $('in-room').value = r;
   const n = r && localStorage.getItem('blitz_name_' + r);
   if (n) $('in-name').value = n;
+  /* индикатор связи ещё ДО входа: достаточно знать, что сервер доступен */
+  fetch(apiUrl('rooms/'), { cache: 'no-store' })
+    .then(function () { setConn(true); })
+    .catch(function () { setConn(false); });
 })();
 
 $('btn-join').addEventListener('click', join);
@@ -127,6 +138,7 @@ async function join() {
     $('wait-text').textContent = 'Вы в комнате. Ждём начала…';
     $('panel-personal').classList.remove('hidden');
     renderPersonal();
+    await loadBonusMine();
     show('sec-wait');
     clearInterval(pollInt);
     pollInt = setInterval(tick, POLL_MS);
@@ -137,6 +149,90 @@ async function join() {
   }
   $('btn-join').disabled = false;
 }
+
+/* ---------------- бонусы (×2, ×3, «Время») ----------------
+   Файл bonuses/{room}/{sid}.json: {sid, name, double, triple, time, used[]},
+   где double/triple/time — номер вопроса, на который заряжен бонус.
+   Зарядить можно только до показа вопроса (в лобби и на экране проверки),
+   каждый бонус — один раз за тест. ×2/×3 умножают очки раунда
+   (в плюс и в минус), «Время» при верном ответе вычитает 80 с из общего
+   времени. Повторное нажатие на заряженный бонус снимает заряд. */
+
+const BONUS_KEYS = ['double', 'triple', 'time'];
+const BONUS_LABELS = { double: '×2', triple: '×3', time: '«Время»' };
+
+async function loadBonusMine() {
+  try {
+    const b = await apiGet('bonuses/' + room + '/' + sid + '.json');
+    bonuses = (b && typeof b === 'object') ? b
+      : { sid: sid, name: name, double: null, triple: null, time: null, used: [] };
+  } catch (e) { /* оставляем локальное состояние */ }
+  renderBonuses();
+}
+
+function armedLabels() {
+  const out = [];
+  if (bonuses) {
+    BONUS_KEYS.forEach(function (k) {
+      if (+bonuses[k]) out.push(BONUS_LABELS[k] + ' → вопрос ' + bonuses[k]);
+    });
+  }
+  return out;
+}
+
+function renderBonuses() {
+  const used = (bonuses && bonuses.used) || [];
+  BONUS_KEYS.forEach(function (k) {
+    const btn = $('b-' + k);
+    if (!btn) return;
+    const isUsed = used.indexOf(k) !== -1;
+    const isArmed = bonuses && +bonuses[k];
+    btn.disabled = isUsed;
+    btn.classList.toggle('used', isUsed);
+    btn.classList.toggle('armed', !!isArmed);
+  });
+  const armed = armedLabels();
+  const chip = $('p-armed');
+  if (chip) {
+    chip.classList.toggle('hidden', !armed.length);
+    chip.textContent = armed.length ? 'Заряжено: ' + armed.join(' · ') : '';
+  }
+  /* чип внутри экрана вопроса: какие бонусы действуют именно сейчас */
+  const qb = $('q-bonus');
+  if (qb) {
+    const act = [];
+    if (bonuses && state && state.round != null) {
+      BONUS_KEYS.forEach(function (k) {
+        if (+bonuses[k] === state.round) act.push(BONUS_LABELS[k]);
+      });
+    }
+    qb.classList.toggle('hidden', !act.length);
+    qb.textContent = act.length ? 'Активны бонусы: ' + act.join(' · ') : '';
+  }
+}
+
+async function armBonus(k) {
+  if (!room || !sid || !state) return;
+  if (state.status === 'active' || state.status === 'done') return;  // только до показа вопроса
+  if (!bonuses) bonuses = { sid: sid, name: name, double: null, triple: null, time: null, used: [] };
+  if ((bonuses.used || []).indexOf(k) !== -1) return;                // израсходован
+  const target = (state.round || 0) + 1;                             // следующий вопрос
+  if (+bonuses[k] === target) {
+    bonuses[k] = null;                                               // снять заряд
+  } else {
+    if (+bonuses[k]) return;                                         // заряжен на другой вопрос
+    if (k === 'double' && +bonuses.triple === target) bonuses.triple = null; // ×2 и ×3 не суммируются
+    if (k === 'triple' && +bonuses.double === target) bonuses.double = null;
+    bonuses[k] = target;
+  }
+  renderBonuses();
+  try { await apiPut('bonuses/' + room + '/' + sid + '.json', bonuses); }
+  catch (e) { /* при следующей попытке отправим снова */ }
+}
+
+$('b-double').addEventListener('click', function () { armBonus('double'); });
+$('b-triple').addEventListener('click', function () { armBonus('triple'); });
+$('b-time').addEventListener('click', function () { armBonus('time'); });
 
 /* ---------------- личная панель (всегда видна после входа) ---------------- */
 
@@ -263,6 +359,7 @@ async function showQuestion(st) {
 
   $('q-round').textContent = 'Раунд ' + st.round;
   $('q-type').textContent = st.type === 'choice' ? 'Выберите один из вариантов' : 'Введите ответ текстом';
+  renderBonuses();
 
   const grid = $('q-options');
   grid.textContent = '';
@@ -361,6 +458,7 @@ function showJudge(st) {
   if (st.round === judgeRoundShown && screen === 'judge') return;
   judgeRoundShown = st.round;
   clearInterval(timerInt);
+  loadBonusMine();   // преподаватель израсходовал заряженные бонусы — обновляем
   const corr = st.lastCorrect;
   const own = (lastResults && lastResults.scores && lastResults.scores[sid]) || null;
   const nowPts = own ? own.points : null;

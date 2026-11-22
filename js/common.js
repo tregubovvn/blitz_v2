@@ -44,6 +44,7 @@ const S_SKIP    = -3;   // намеренный пропуск
 const S_TIMEOUT = -3;   // не ответил вовремя
 const BONUS_MIN = 4;    // бонус за скорость при ответе в последний момент
 const BONUS_MAX = 8;    // бонус за скорость при мгновенном ответе
+const TIME_BONUS_SEC = 80; // бонус «Время»: −80 с от общего времени при верном ответе
 
 /* Множитель серии по её длине n (включая текущий верный ответ) */
 function streakMult(n) { n = +n || 0; return n >= 7 ? 3 : (n >= 4 ? 2 : 1); }
@@ -260,9 +261,13 @@ function rankFromScores(scores) {
   });
   if (!rows.length) return [];
   const maxPoints = Math.max(1, Math.max.apply(null, rows.map(function (r) { return r.points; })));
-  const minTime = Math.min.apply(null, rows.map(function (r) { return r.time; }));
+  /* минимум берём только по положительным временам: бонус «Время» может обнулить
+     время отдельного студента — остальные не должны из-за этого терять балл
+     за скорость (нулевое время трактуется как лучшее) */
+  const posTimes = rows.map(function (r) { return +r.time || 0; }).filter(function (t) { return t > 0; });
+  const minTime = posTimes.length ? Math.min.apply(null, posTimes) : 0;
   rows.forEach(function (r) {
-    const tN = r.time > 0 ? minTime / r.time : 1;
+    const tN = !(+r.time > 0) || minTime <= 0 ? 1 : minTime / r.time;
     r.score = Math.round((70 * (r.points / maxPoints) + 30 * tN) * 10) / 10;
   });
   rows.sort(function (a, b) {
