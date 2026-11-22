@@ -224,11 +224,13 @@ function fmtTime(sec) {
   return m + ' мин ' + (s ? s + ' с' : '');
 }
 
-/* Деление на 3 группы: 50% / 30% / 20% (метод наибольших остатков,
-   чтобы при маленьком числе студентов квоты распределялись корректно).
-   Возвращает [кол-во «отлично», «хорошо», «удовлетворительно»]. */
-function splitGroups(n) {
-  const quota = [n * 0.5, n * 0.3, n * 0.2];
+/* Деление на 3 группы по долям в процентах (по умолчанию 50 / 30 / 20;
+   настройки комнаты задают доли с точностью до 10 %), метод наибольших
+   остатков, чтобы при маленьком числе участников квоты распределялись
+   корректно. Возвращает [кол-во «отлично», «хорошо», «удовлетворительно»]. */
+function splitGroups(n, shares) {
+  const sh = (Array.isArray(shares) && shares.length === 3) ? shares : [50, 30, 20];
+  const quota = [n * sh[0] / 100, n * sh[1] / 100, n * sh[2] / 100];
   const cnt = quota.map(Math.floor);
   let rest = n - cnt.reduce(function (a, b) { return a + b; }, 0);
   quota
@@ -245,7 +247,7 @@ function splitGroups(n) {
    неверный — −7 (серия обнуляется), пропуск — −3 (серия сохраняется),
    таймаут — −3 (серия обнуляется).
    Каждая строка получает place (место) и group (0=Золото, 1=Серебро, 2=Бронза). */
-function rankFromScores(scores) {
+function rankFromScores(scores, shares) {
   const rows = Object.keys(scores || {}).map(function (sid) {
     const s = scores[sid] || {};
     return {
@@ -274,7 +276,31 @@ function rankFromScores(scores) {
     return b.score - a.score || b.points - a.points || a.time - b.time ||
       a.name.localeCompare(b.name);
   });
-  const g = splitGroups(rows.length);
+  const g = splitGroups(rows.length, shares);
+  rows.forEach(function (r, i) {
+    r.place = i + 1;
+    r.group = i < g[0] ? 0 : (i < g[0] + g[1] ? 1 : 2);
+  });
+  return rows;
+}
+
+/* Рейтинг команд (режим команд): баллы команды = сумма баллов участников.
+   Сортировка по очкам; группы (Золото/Серебро/Бронза) распределяются по
+   тем же долям, что и у студентов, но применённым к числу КОМАНД. */
+function rankTeams(scores, teams, shares) {
+  const rows = (teams || []).map(function (t) {
+    const sids = t.sids || [];
+    const pts = sids.reduce(function (a, sid) {
+      const s = (scores || {})[sid];
+      return a + (s ? (+s.points || 0) : 0);
+    }, 0);
+    return { name: t.name, sids: sids, members: sids.length, points: pts };
+  });
+  if (!rows.length) return [];
+  rows.sort(function (a, b) {
+    return b.points - a.points || a.name.localeCompare(b.name);
+  });
+  const g = splitGroups(rows.length, shares);
   rows.forEach(function (r, i) {
     r.place = i + 1;
     r.group = i < g[0] ? 0 : (i < g[0] + g[1] ? 1 : 2);

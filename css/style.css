@@ -117,6 +117,17 @@ code.room{font-size:26px;font-weight:800;letter-spacing:4px;background:linear-gr
 .stu-chip:hover .x{color:var(--bad)}
 .avatar{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--accent2),var(--accent));font-style:normal;font-weight:800;font-size:12px;color:#fff}
 
+/* --- выбор долей групп и режима команд (создание комнаты) --- */
+select{
+  width:100%;padding:11px 13px;font-size:15px;color:var(--ink);
+  background:rgba(255,255,255,.07);border:1px solid var(--line);border-radius:12px;
+  transition:border .2s,box-shadow .2s;
+}
+select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(56,189,248,.25)}
+select option{color:#141c3f;background:#eef2ff}
+.preset{display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600;color:var(--ink);margin:4px 0;cursor:pointer}
+.preset input{width:auto;accent-color:var(--accent);transform:scale(1.2)}
+
 /* --- бонусы студента --- */
 .bonuses{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:6px}
 button.bonus{display:flex;flex-direction:column;align-items:center;gap:3px;padding:13px 6px;background:rgba(255,255,255,.07);border:1px solid var(--line);border-radius:14px;box-shadow:none;color:var(--ink)}

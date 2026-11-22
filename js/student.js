@@ -234,6 +234,32 @@ $('b-double').addEventListener('click', function () { armBonus('double'); });
 $('b-triple').addEventListener('click', function () { armBonus('triple'); });
 $('b-time').addEventListener('click', function () { armBonus('time'); });
 
+/* ---------------- команды (режим команд) ---------------- */
+
+function sharesFromState() {
+  const g = state && state.groups;
+  return g ? [g.gold, g.silver, g.bronze] : null;
+}
+
+/* Чип команды в личной панели: название, баллы команды и её место */
+function renderTeamChip() {
+  const chip = $('p-team');
+  if (!chip) return;
+  if (!(state && state.teamMode)) { chip.classList.add('hidden'); return; }
+  const teams = state.teams || [];
+  if ((state.round || 0) < 1 || !teams.length) {
+    chip.classList.remove('hidden');
+    chip.textContent = 'Команды соберутся на старте первого раунда';
+    return;
+  }
+  const rows = rankTeams(lastResults ? lastResults.scores : {}, teams, sharesFromState());
+  const mine = rows.find(function (r) { return (r.sids || []).indexOf(sid) !== -1; });
+  chip.classList.remove('hidden');
+  chip.textContent = mine
+    ? mine.name + ' · ' + mine.points + ' очк. · ' + mine.place + ' место из ' + rows.length
+    : 'Ищем вам команду…';
+}
+
 /* ---------------- личная панель (всегда видна после входа) ---------------- */
 
 function renderPersonal() {
@@ -249,6 +275,8 @@ function renderPersonal() {
   $('p-place').textContent = me ? (me.place + ' / ' + rows.length) : '—';
   $('p-streak').textContent = own ? (own.streak || 0) : '—';
   if (own && lastKnownPoints == null) lastKnownPoints = own.points;
+
+  renderTeamChip();   // чип команды (режим команд)
 
   // тройка лидеров
   const pod = $('p-podium');
@@ -512,7 +540,7 @@ function showFinal() {
   if (st && Array.isArray(st.standings) && st.standings.length) {
     rows = st.standings;                       // преподаватель прислал итоги
   } else if (lastResults && lastResults.finished) {
-    rows = rankFromScores(lastResults.scores); // считаем сами из результатов
+    rows = rankFromScores(lastResults.scores, sharesFromState()); // считаем сами из результатов
   }
   if (!rows) {
     if (screen !== 'wait') show('sec-wait');
@@ -535,6 +563,13 @@ function showFinalFromCache(cached) {
   grp.className = 'final-group';
   grp.textContent = 'Группа: ' + (cached.groupName || '—');
   $('final-me').appendChild(grp);
+  if (cached.team) {
+    const tl = document.createElement('div');
+    tl.className = 'final-group';
+    tl.textContent = 'Команда: ' + cached.team.name + ' · очки команды: ' + cached.team.points +
+      ' · ' + cached.team.place + ' место из ' + cached.team.total;
+    $('final-me').appendChild(tl);
+  }
   show('sec-final');
 }
 
@@ -542,6 +577,19 @@ function renderFinalScreen(rows) {
   const me = rows.find(function (r) { return r.sid === sid; }) || null;
   const fm = $('final-me');
   fm.textContent = '';
+
+  /* режим команд: группы студентов — от их команды; своя строка команды */
+  let teamInfo = null;
+  let teamRows = [];
+  if (state && state.teamMode) {
+    teamRows = rankTeams(lastResults ? lastResults.scores : {}, state.teams || [], sharesFromState());
+    teamInfo = teamRows.find(function (r) { return (r.sids || []).indexOf(sid) !== -1; }) || null;
+    rows.forEach(function (r) {
+      const tr = teamRows.find(function (t) { return (t.sids || []).indexOf(r.sid) !== -1; });
+      if (tr) r.group = tr.group;
+    });
+  }
+
   if (me) {
     const big = document.createElement('div');
     big.className = 'final-score';
@@ -551,11 +599,20 @@ function renderFinalScreen(rows) {
     grp.className = 'final-group';
     grp.textContent = 'Группа: ' + GROUP_NAMES[me.group || 0];
     fm.appendChild(grp);
+    if (teamInfo) {
+      const tl = document.createElement('div');
+      tl.className = 'final-group';
+      tl.textContent = 'Команда: ' + teamInfo.name + ' · очки команды: ' + teamInfo.points +
+        ' · ' + teamInfo.place + ' место из ' + teamRows.length;
+      fm.appendChild(tl);
+    }
     // кэш на случай удаления комнаты преподавателем
     try {
       localStorage.setItem('blitz_final_' + room, JSON.stringify({
         score: me.score, place: me.place, total: rows.length,
-        groupName: GROUP_NAMES[me.group || 0]
+        groupName: GROUP_NAMES[me.group || 0],
+        team: teamInfo ? { name: teamInfo.name, points: teamInfo.points,
+          place: teamInfo.place, total: teamRows.length } : null
       }));
     } catch (e) { /* не критично */ }
   } else {
