@@ -1,0 +1,226 @@
+/* ===== Блиц-опрос — современная динамичная тёмная тема ===== */
+:root{
+  --bg1:#0b1026; --bg2:#141c3f;
+  --card:rgba(255,255,255,.055);
+  --line:rgba(255,255,255,.12);
+  --ink:#eef2ff; --muted:#9aa7c7;
+  --accent:#38bdf8; --accent2:#6366f1;
+  --ok:#34d399; --bad:#f87171;
+  --gold1:#ffe08a; --gold2:#f5a524;
+  --silver1:#eef2f8; --silver2:#aab8cc;
+  --bronze1:#f3c29a; --bronze2:#c9803e;
+  --radius:18px;
+  --shadow:0 18px 50px rgba(2,6,23,.45);
+}
+*{box-sizing:border-box}
+html,body{min-height:100%}
+body{
+  margin:0;color:var(--ink);
+  font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;
+  background:linear-gradient(160deg,var(--bg1),var(--bg2) 55%,#1d1440);
+  background-attachment:fixed;line-height:1.5;overflow-x:hidden;
+}
+/* плавающие световые пятна */
+body::before,body::after{
+  content:"";position:fixed;z-index:-1;border-radius:50%;
+  filter:blur(90px);opacity:.5;pointer-events:none;
+}
+body::before{width:520px;height:520px;background:#2b3d8f;top:-160px;left:-120px;animation:float1 14s ease-in-out infinite alternate}
+body::after{width:460px;height:460px;background:#7c3aed;bottom:-160px;right:-120px;animation:float2 17s ease-in-out infinite alternate}
+@keyframes float1{to{transform:translate(90px,70px) scale(1.15)}}
+@keyframes float2{to{transform:translate(-80px,-60px) scale(1.1)}}
+
+.wrap{max-width:960px;margin:0 auto;padding:30px 16px 64px}
+h1{font-size:28px;margin:0 0 6px;letter-spacing:.3px}
+h2{font-size:19px;margin:20px 0 10px}
+.sub{color:var(--muted);margin:0 0 22px;font-size:14px}
+.card{
+  background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow);padding:22px;margin-bottom:18px;
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  animation:fadeUp .4s ease both;
+}
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.hidden{display:none!important}
+.muted{color:var(--muted)}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.grow{flex:1 1 240px}
+label{display:block;font-size:13px;color:var(--muted);margin:12px 0 6px}
+input[type=text],input[type=password]{
+  width:100%;padding:13px 15px;font-size:16px;color:var(--ink);
+  background:rgba(255,255,255,.07);border:1px solid var(--line);border-radius:12px;
+  transition:border .2s,box-shadow .2s;
+}
+input::placeholder{color:#6b7699}
+input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(56,189,248,.25)}
+.shake{animation:shake .45s}
+@keyframes shake{20%,60%{transform:translateX(-7px)}40%,80%{transform:translateX(7px)}}
+
+button{
+  padding:12px 20px;font-size:15px;font-weight:700;color:#fff;cursor:pointer;
+  border:0;border-radius:12px;
+  background:linear-gradient(135deg,var(--accent2),var(--accent));
+  box-shadow:0 8px 22px rgba(56,120,248,.35);
+  transition:transform .15s,box-shadow .15s,filter .15s;
+}
+button:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 12px 26px rgba(56,120,248,.45);filter:saturate(1.15)}
+button:active:not(:disabled){transform:translateY(0) scale(.98)}
+button:disabled{background:rgba(255,255,255,.14);box-shadow:none;cursor:not-allowed;color:#8b96b5}
+button.ghost{background:transparent;border:1px solid var(--line);color:var(--ink);box-shadow:none}
+button.ghost:hover:not(:disabled){border-color:var(--accent);color:var(--accent);transform:translateY(-2px)}
+button.big{display:block;width:100%;text-align:left;margin-top:10px;padding:17px 20px;font-size:16px}
+button.danger{background:linear-gradient(135deg,#e11d48,#f43f5e)}
+button.success{background:linear-gradient(135deg,#059669,#34d399)}
+
+/* --- кольцо-таймер --- */
+.timerline{display:flex;gap:20px;align-items:center;margin:12px 0 18px;flex-wrap:wrap}
+.ring{position:relative;width:112px;height:112px;flex:0 0 auto}
+.ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:9;stroke-linecap:round}
+.ring .ring-bg{stroke:rgba(255,255,255,.12)}
+.ring .ring-fg{stroke:var(--accent);stroke-dasharray:326.73;transition:stroke-dashoffset .25s linear,stroke .3s}
+.ring-num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:36px;font-weight:800;font-variant-numeric:tabular-nums}
+.ring.low .ring-fg{stroke:var(--bad)}
+.ring.low .ring-num{color:var(--bad);animation:pop 1s infinite}
+@keyframes pop{50%{transform:scale(1.12)}}
+
+table{width:100%;border-collapse:collapse;font-size:15px}
+th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+th{color:var(--muted);font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+tr.top1{background:linear-gradient(90deg,rgba(245,165,36,.16),transparent)}
+tr.top2{background:linear-gradient(90deg,rgba(203,213,225,.13),transparent)}
+tr.top3{background:linear-gradient(90deg,rgba(201,128,62,.16),transparent)}
+
+.place{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 7px;border-radius:999px;font-weight:800;background:rgba(255,255,255,.08)}
+.place.m1{background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#3d2b00}
+.place.m2{background:linear-gradient(135deg,var(--silver1),var(--silver2));color:#2c3440}
+.place.m3{background:linear-gradient(135deg,var(--bronze1),var(--bronze2));color:#3a2003}
+
+.chip{display:inline-block;padding:4px 12px;border-radius:999px;font-size:12.5px;font-weight:800;white-space:nowrap}
+.chip.g1{background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#3d2b00}
+.chip.g2{background:linear-gradient(135deg,var(--silver1),var(--silver2));color:#2c3440}
+.chip.g3{background:linear-gradient(135deg,var(--bronze1),var(--bronze2));color:#3a2003}
+.chip.ok{background:rgba(52,211,153,.18);color:var(--ok)}
+.chip.bad{background:rgba(248,113,113,.18);color:var(--bad)}
+
+.names{color:var(--muted);font-size:13px;margin-top:4px}
+code.room{font-size:26px;font-weight:800;letter-spacing:4px;background:linear-gradient(135deg,rgba(99,102,241,.35),rgba(56,189,248,.3));border:1px solid var(--line);border-radius:12px;padding:8px 18px;display:inline-block}
+.statusdot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--bad);margin-right:7px;vertical-align:middle}
+.statusdot.on{background:var(--ok);animation:pulse 1.6s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.5)}70%{box-shadow:0 0 0 9px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+
+/* студенты — чипы с инициалами (нажатие удаляет студента) */
+.stuchips{display:flex;flex-wrap:wrap;gap:9px;margin-top:8px}
+.stu-chip{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.07);border:1px solid var(--line);border-radius:999px;padding:5px 13px 5px 5px;font-size:14px;color:var(--ink);font-family:inherit;box-shadow:none;animation:fadeUp .3s ease both;cursor:pointer}
+.stu-chip:hover:not(:disabled){transform:translateY(-2px);border-color:var(--bad);box-shadow:none;filter:none}
+.stu-chip .x{font-style:normal;font-weight:800;color:var(--muted);margin-left:2px}
+.stu-chip:hover .x{color:var(--bad)}
+.avatar{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--accent2),var(--accent));font-style:normal;font-weight:800;font-size:12px;color:#fff}
+
+/* --- бонусы студента --- */
+.bonuses{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:6px}
+button.bonus{display:flex;flex-direction:column;align-items:center;gap:3px;padding:13px 6px;background:rgba(255,255,255,.07);border:1px solid var(--line);border-radius:14px;box-shadow:none;color:var(--ink)}
+button.bonus b{font-size:20px;font-variant-numeric:tabular-nums}
+button.bonus span{font-size:11.5px;color:var(--muted);letter-spacing:0;text-transform:none}
+button.bonus:hover:not(:disabled){transform:translateY(-2px);border-color:var(--accent);box-shadow:none;filter:none}
+button.bonus.armed{border-color:var(--accent);background:rgba(56,189,248,.14);box-shadow:0 0 0 3px rgba(56,189,248,.18)}
+button.bonus.armed span{color:var(--accent)}
+button.bonus.used{opacity:.35;filter:grayscale(.7)}
+.chip.armed{background:rgba(56,189,248,.16);color:var(--accent);font-weight:700}
+
+/* --- статистика тестирований (первый экран преподавателя) --- */
+.rec{border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.04);margin-bottom:10px;overflow:hidden}
+.rec-head{display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;flex-wrap:wrap;transition:background .15s}
+.rec-head:hover{background:rgba(255,255,255,.05)}
+.rec-date{font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.rec-topic{font-weight:700;flex:1 1 200px;min-width:160px}
+.rec-meta{display:flex;gap:8px;flex-wrap:wrap}
+.mini{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;font-style:normal;background:rgba(255,255,255,.08);color:var(--muted);white-space:nowrap}
+.rec-body{border-top:1px solid var(--line);padding:6px 16px 14px}
+button.ghost.danger-text{color:var(--bad)}
+button.ghost.danger-text:hover:not(:disabled){border-color:var(--bad);color:var(--bad)}
+
+.optgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:14px;margin:16px 0 4px}
+.optgrid button{font-size:26px;padding:24px 0;font-weight:800}
+
+.answerGroup{border:1px solid var(--line);border-radius:14px;padding:13px 16px;margin-bottom:12px;background:rgba(255,255,255,.04);transition:transform .15s,border-color .15s}
+.answerGroup:hover{transform:translateY(-2px);border-color:rgba(56,189,248,.45)}
+.answerGroup .head{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.answerGroup .ans{font-weight:800;font-size:17px}
+
+/* --- личная панель студента --- */
+.panel{
+  border:1px solid var(--line);border-radius:var(--radius);background:var(--card);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  padding:18px 20px;margin-bottom:18px;box-shadow:var(--shadow);animation:fadeUp .4s ease both;
+}
+.p-head{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.p-name{font-size:20px;font-weight:800}
+.stats{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+.stat{background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:14px;padding:12px 8px;text-align:center}
+.stat b{display:block;font-size:24px;font-weight:800;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.stat.accent b{color:var(--accent)}
+.podium-cap{font-size:12.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin:14px 0 8px}
+.podium{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.pod{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:12px;padding:9px 12px;min-width:0}
+.pod b{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;font-weight:800}
+.pod span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.pod .score{flex:0 0 auto;margin-left:auto;font-style:normal;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums}
+.pod.p1 b{background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#3d2b00}
+.pod.p2 b{background:linear-gradient(135deg,var(--silver1),var(--silver2));color:#2c3440}
+.pod.p3 b{background:linear-gradient(135deg,var(--bronze1),var(--bronze2));color:#3a2003}
+.err{color:var(--bad);font-size:14px;margin-top:8px;min-height:18px}
+
+/* --- блок правил на странице студента --- */
+.rules{
+  margin-top:18px;border-top:1px solid var(--line);padding-top:16px;
+  font-size:14px;color:var(--ink);
+  animation:fadeUp .45s ease both;
+}
+.rules-title{
+  font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;
+  color:var(--accent);margin-bottom:10px;
+}
+.rules p{margin:8px 0;color:var(--muted)}
+.rules b{color:var(--ink)}
+.rules ul{margin:8px 0;padding-left:20px}
+.rules li{margin:7px 0;color:var(--muted)}
+.rules li b{color:var(--ink)}
+
+/* --- анимация пересчёта итогов (панель преподавателя) --- */
+.recalc-title{font-weight:800;font-size:15px;margin-bottom:8px;animation:pop 1.2s infinite}
+.recalc-bar{
+  height:12px;border-radius:999px;background:rgba(255,255,255,.08);
+  border:1px solid var(--line);overflow:hidden;
+}
+.recalc-bar i{
+  display:block;height:100%;width:0%;
+  background:linear-gradient(90deg,var(--accent2),var(--accent));
+  transition:width .12s linear;border-radius:999px;
+}
+
+/* --- итоговый результат студента --- */
+.final-me{margin:6px 0 4px}
+.final-score{
+  font-size:26px;font-weight:800;
+  background:linear-gradient(90deg,var(--accent),var(--accent2));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  animation:pop .8s ease 1;
+}
+.final-group{color:var(--muted);font-weight:600;margin-top:4px}
+
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.cards a{display:block;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:28px;color:var(--ink);text-decoration:none;backdrop-filter:blur(14px);transition:transform .18s,border-color .18s}
+.cards a:hover{transform:translateY(-4px);border-color:var(--accent)}
+.cards .t{font-size:21px;font-weight:800;margin-bottom:8px;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+@media(max-width:900px){
+  .stats{grid-template-columns:repeat(3,1fr)}
+}
+@media(max-width:640px){
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .bonuses{grid-template-columns:repeat(3,1fr)}
+  .podium{grid-template-columns:1fr}
+  .ring{width:96px;height:96px}
+  .ring-num{font-size:30px}
+}
