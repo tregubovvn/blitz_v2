@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Блиц-опрос — преподаватель</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="wrap">
+  <h1>Блиц-опрос — панель преподавателя</h1>
+  <p class="sub"><span id="conn" class="statusdot"></span><span id="conn-text">нет связи с сервером</span></p>
+
+  <!-- Первый экран: создание комнаты + статистика завершённых тестов -->
+  <section id="sec-create" class="card">
+    <h2>Создать комнату</h2>
+    <p class="muted">Код можно оставить пустым — он создастся автоматически.
+    Вопросы писать не нужно: вы выбираете только тип раунда. Студенты входят
+    с первой страницы сайта, указав ФИО.</p>
+    <div class="row">
+      <div class="grow">
+        <label for="room-id">Код комнаты (необязательно)</label>
+        <input type="text" id="room-id" maxlength="12" placeholder="например, A7B2K" autocomplete="off">
+      </div>
+      <div class="grow">
+        <label for="teacher-pass">Пароль учителя (только если настроен на сервере)</label>
+        <input type="password" id="teacher-pass" autocomplete="off">
+      </div>
+    </div>
+    <div class="row" style="margin-top:16px">
+      <button id="btn-open">Создать комнату</button>
+    </div>
+  </section>
+
+  <section id="sec-stats" class="card">
+    <h2>Статистика тестирований</h2>
+    <p class="muted">Каждая завершённая комната сохраняется здесь: дата, название темы
+    и результаты всех студентов. Нажмите на запись, чтобы просмотреть её.
+    Каждая комната работает только на один тест.</p>
+    <div id="stats-list"></div>
+    <div class="row" style="margin-top:14px">
+      <button id="btn-refresh" class="ghost">Обновить статистику</button>
+    </div>
+  </section>
+
+  <section id="sec-lobby" class="card hidden">
+    <h2>Комната: <code class="room" id="lobby-room"></code></h2>
+
+    <label for="in-topic">Название темы (попадёт в статистику)</label>
+    <input type="text" id="in-topic" maxlength="120" value="Тестирование студентов" autocomplete="off">
+
+    <label for="stu-link">Ссылка для студентов</label>
+    <div class="row">
+      <input type="text" id="stu-link" readonly class="grow">
+      <button id="btn-copy" class="ghost">Копировать</button>
+    </div>
+
+    <h2>Студенты в комнате (<span id="stu-count">0</span>)</h2>
+    <p class="muted" style="font-size:13px;margin:4px 0">Нажмите на чип студента, чтобы удалить его из комнаты.</p>
+    <div class="stuchips" id="stu-chips"></div>
+    <div class="row" style="margin-top:10px">
+      <button id="btn-del-all" class="ghost danger-text">Удалить всех студентов</button>
+    </div>
+
+    <div id="start-area">
+      <h2>Запустить раунд</h2>
+      <button class="big" id="btn-choice">Варианты 1.А, 2.Б, 3.В, 4.Г, 5.Д — на ответ 20 секунд</button>
+      <button class="big" id="btn-text">Ввод текста — на ответ 40 секунд</button>
+      <div class="row" style="margin-top:18px">
+        <button id="btn-finish" class="danger" disabled>Завершить тест и сохранить в статистику</button>
+      </div>
+    </div>
+
+    <div id="lobby-table-wrap" class="hidden" style="margin-top:22px;border-top:1px solid var(--line);padding-top:18px">
+      <div class="podium-cap">Таблица результатов (обновляется после каждого раунда)</div>
+      <div id="lobby-table"></div>
+    </div>
+
+    <!-- Раунд открывается ВНУТРИ этой карточки, без отдельного окна -->
+    <div id="round-box" class="hidden" style="margin-top:22px;border-top:1px solid var(--line);padding-top:18px">
+      <div class="timerline">
+        <div class="ring" id="ring-wrap">
+          <svg viewBox="0 0 120 120" aria-hidden="true">
+            <circle class="ring-bg" cx="60" cy="60" r="52"></circle>
+            <circle class="ring-fg" cx="60" cy="60" r="52" id="ring-fg"></circle>
+          </svg>
+          <div class="ring-num" id="t-num">–</div>
+        </div>
+        <div class="grow">
+          <h2 id="round-title" style="margin-top:0"></h2>
+          <p id="judged-note" class="muted"></p>
+        </div>
+      </div>
+      <div id="answers"></div>
+      <div class="row" style="margin-top:14px">
+        <button id="btn-skip" class="ghost">Нет правильного ответа</button>
+      </div>
+
+      <!-- Анимация пересчёта итогов: 5 секунд после проверки раунда,
+           затем все автоматически возвращаются в режим ожидания -->
+      <div id="recalc" class="hidden" style="margin-top:16px">
+        <div class="recalc-title">Итоги пересчитываются…</div>
+        <div class="recalc-bar"><i id="recalc-fill"></i></div>
+        <p class="muted" style="font-size:13px;margin:8px 0 0">Через несколько секунд студенты вернутся в режим ожидания следующего вопроса.</p>
+      </div>
+
+      <div id="round-table-wrap" class="hidden" style="margin-top:20px">
+        <div class="podium-cap">Таблица результатов</div>
+        <div id="round-table"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="sec-final" class="card hidden">
+    <h2>Тест завершён</h2>
+    <p id="final-topic" class="muted"></p>
+    <p class="muted">Результаты всех студентов сохранены в статистике на первой странице
+    преподавателя. Комната закрыта и удалена — войти в неё снова нельзя,
+    пока вы не создадите её заново.</p>
+    <div class="podium-cap">Полная итоговая таблица результатов</div>
+    <div id="final-table"></div>
+    <div class="row" style="margin-top:16px">
+      <button id="btn-csv" class="ghost">Скачать CSV</button>
+      <button id="btn-new">Новая комната (новый тест)</button>
+      <button id="btn-home" class="ghost">На главную</button>
+    </div>
+  </section>
+</div>
+<script src="js/common.js"></script>
+<script src="js/teacher.js"></script>
+</body>
+</html>

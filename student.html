@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Блиц-опрос — студент</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="wrap">
+  <h1>Блиц-опрос — студент</h1>
+  <p class="sub"><span id="conn" class="statusdot"></span><span id="conn-text">нет связи с сервером</span></p>
+
+  <section id="sec-join" class="card">
+    <h2>Вход</h2>
+    <label for="in-room">Код комнаты (от преподавателя)</label>
+    <input type="text" id="in-room" maxlength="12" placeholder="например, A7B2K" autocomplete="off">
+    <label for="in-name">Ваше ФИО (обязательно)</label>
+    <input type="text" id="in-name" maxlength="60" placeholder="Иванов Иван Иванович" autocomplete="off">
+    <div class="err" id="name-error"></div>
+    <div class="row">
+      <button id="btn-join">Войти в комнату</button>
+    </div>
+  </section>
+
+  <section id="panel-personal" class="panel hidden">
+    <div class="p-head">
+      <span id="p-name" class="p-name"></span>
+      <span id="p-armed" class="chip armed hidden"></span>
+    </div>
+    <div class="stats">
+      <div class="stat accent"><b id="p-points">—</b><span>очки</span></div>
+      <div class="stat"><b id="p-correct">—</b><span>верно</span></div>
+      <div class="stat"><b id="p-wrong">—</b><span>неверно</span></div>
+      <div class="stat"><b id="p-time">—</b><span>время</span></div>
+      <div class="stat"><b id="p-place">—</b><span>место</span></div>
+      <div class="stat"><b id="p-streak">—</b><span>серия</span></div>
+    </div>
+
+    <div class="podium-cap">Бонусы — активируйте до показа вопроса, каждый можно использовать один раз</div>
+    <div class="bonuses">
+      <button type="button" class="bonus" data-b="double" id="b-double"><b>×2</b><span>Двойные очки</span></button>
+      <button type="button" class="bonus" data-b="triple" id="b-triple"><b>×3</b><span>Тройные очки</span></button>
+      <button type="button" class="bonus" data-b="time" id="b-time"><b>−80 с</b><span>Запас времени</span></button>
+    </div>
+    <p class="muted" style="font-size:12.5px;margin:8px 0 0">
+      ×2: верный +2 очка, неверный −2 · ×3: +3 / −3 · Время: при верном ответе −80 с от общего времени ·
+      Серия: больше 3 подряд — по 2 очка за верный, больше 6 — по 3; пропуск серию не прерывает.
+    </p>
+
+    <div class="podium-cap">Лидеры</div>
+    <div class="podium" id="p-podium"></div>
+  </section>
+
+  <section id="sec-wait" class="card hidden">
+    <h2>Ожидание</h2>
+    <p id="wait-text" class="muted">Ждём начала…</p>
+  </section>
+
+  <section id="sec-question" class="card hidden">
+    <p class="muted" id="q-round" style="margin-top:0"></p>
+    <h2 id="q-type" style="margin-top:4px"></h2>
+    <div id="q-bonus" class="chip armed hidden" style="margin-top:10px"></div>
+    <div class="timerline">
+      <div class="ring" id="ring-wrap">
+        <svg viewBox="0 0 120 120" aria-hidden="true">
+          <circle class="ring-bg" cx="60" cy="60" r="52"></circle>
+          <circle class="ring-fg" cx="60" cy="60" r="52" id="ring-fg"></circle>
+        </svg>
+        <div class="ring-num" id="t-num">–</div>
+      </div>
+      <p class="muted grow" style="margin:0">Время идёт с момента, как вы увидели вопрос. Отвечайте быстрее — скорость влияет на балл.</p>
+    </div>
+    <div id="q-choice" class="hidden">
+      <div class="optgrid" id="q-options"></div>
+    </div>
+    <div id="q-textblock" class="hidden">
+      <label for="q-input">Ваш ответ</label>
+      <input type="text" id="q-input" maxlength="200" autocomplete="off">
+      <div class="row" style="margin-top:12px">
+        <button id="q-send">Отправить ответ</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="sec-sent" class="card hidden">
+    <h2>Ответ принят</h2>
+    <p id="sent-text" class="muted"></p>
+  </section>
+
+  <section id="sec-late" class="card hidden">
+    <h2>Время вышло</h2>
+    <p id="late-text" class="muted"></p>
+  </section>
+
+  <section id="sec-judge" class="card hidden">
+    <h2>Раунд завершён</h2>
+    <p id="verdict" style="white-space:pre-line"></p>
+  </section>
+
+  <section id="sec-final" class="card hidden">
+    <h2>Итоги теста</h2>
+    <p class="muted">Ваш результат (очки, верно, неверно, время и место) — в панели сверху.
+    Полный рейтинг показывает преподаватель.</p>
+    <div class="podium-cap">Три лучших результата</div>
+    <div class="podium" id="final-top3"></div>
+  </section>
+</div>
+<script src="js/common.js"></script>
+<script src="js/student.js"></script>
+</body>
+</html>

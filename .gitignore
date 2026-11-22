@@ -1,0 +1,9 @@
+# каталог данных на сервере (создаётся nginx'ом, в git не нужен)
+data/
+
+# служебные файлы
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
