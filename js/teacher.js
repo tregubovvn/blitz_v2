@@ -56,6 +56,7 @@ const seenAnswerFiles = new Set();
 let answersByRound = {};       // номер раунда -> sid -> {name, answer, elapsed, skip}
 let bonusesCache = {};         // sid -> файл бонусов {double, triple, time, used[]}
 let teamsPutTimer = null;      // отложенная запись распределения по командам
+let revealedZero = false;      // ответы раскрыты по окончании отсчёта
 let screen = 'stats';
 let roundBoxOn = false;        // встроенная панель раунда показана
 let pollInt = null;
@@ -829,6 +830,7 @@ function enterRound() {
   curRound = state.round;
   judged = false;
   judging = false;
+  revealedZero = false;
   lastJudgedKey = null;
   lastJudgedTitle = '';
   $('recalc').classList.add('hidden');
@@ -847,6 +849,11 @@ function renderTimer() {
     const rem = Math.max(0, (state.startedAt + state.duration * 1000 - serverNow()) / 1000);
     $('t-num').textContent = Math.ceil(rem);
     setRing(Math.max(0, Math.min(1, rem / state.duration)), rem < state.duration * 0.25);
+    /* отсчёт закончился — сразу раскрываем ответы (не ждём опроса) */
+    if (!revealedZero && rem <= 0 && state.status === 'active') {
+      revealedZero = true;
+      renderRound();
+    }
   } else {                       // раунд закрыт — время вышло
     $('t-num').textContent = '0';
     setRing(0, false);
@@ -858,6 +865,34 @@ function choiceIndex(label) {
   return isNaN(n) ? 99 : n;
 }
 
+/* Прогресс раунда до окончания отсчёта: сколько уже ответили (включая
+   намеренные пропуски) и ФИО тех, кто ещё не ответил. */
+function renderAnsweredProgress(ans) {
+  const box = $('answers');
+  box.textContent = '';
+  const sids = Object.keys(students);
+  const pending = sids.filter(function (sid) { return !ans[sid]; });
+  const answered = sids.length - pending.length;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'answerGroup';
+  const head = document.createElement('div');
+  head.className = 'head';
+  const cnt = document.createElement('span');
+  cnt.className = 'ans';
+  cnt.textContent = 'Ответили: ' + answered + ' из ' + sids.length;
+  head.appendChild(cnt);
+
+  const names = document.createElement('div');
+  names.className = 'names';
+  if (!sids.length) names.textContent = 'В комнате пока нет студентов.';
+  else if (!pending.length) names.textContent = 'Ответили все.';
+  else names.textContent = 'Ещё не ответили: ' + pending.map(function (sid) { return students[sid].name; }).join(', ');
+
+  wrap.append(head, names);
+  box.appendChild(wrap);
+}
+
 function renderRound() {
   const isChoice = state.type === 'choice';
   $('round-title').textContent = 'Раунд ' + curRound + ' — ' +
@@ -867,6 +902,12 @@ function renderRound() {
   const ans = answersByRound[curRound] || {};
   const box = $('answers');
   box.textContent = '';
+
+  /* До конца отсчёта ответы скрыты: преподаватель видит только число
+     ответивших и ФИО тех, кто ещё не ответил. Варианты/тексты
+     раскрываются, когда отсчёт закончился (или раунд уже проверен). */
+  const remainMs = state.startedAt + state.duration * 1000 - serverNow();
+  const showAnswers = judged || state.status !== 'active' || remainMs <= 0;
   // только реально поступившие ответы студентов, которые есть в комнате;
   // намеренные пропуски (skip) в списке вариантов не показываются —
   // они учтутся автоматически (−3 очка, серия сохраняется)
@@ -877,14 +918,14 @@ function renderRound() {
       return a;
     });
 
-  if (!list.length) {
+  if (!showAnswers) {
+    renderAnsweredProgress(ans);
+  } else if (!list.length) {
     const p = document.createElement('p');
     p.className = 'muted';
     p.textContent = 'Ответов пока нет…';
     box.appendChild(p);
-  }
-
-  if (isChoice) {
+  } else if (isChoice) {
     const groups = {};
     list.forEach(function (a) {
       const k = String(a.answer);
