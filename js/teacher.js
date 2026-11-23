@@ -34,6 +34,15 @@
      раунда и в финальном экране.
    — «Завершить тест» доступна ВСЕГДА: если студентов нет, комната
      просто закрывается и удаляется без записи в статистику.
+   — Доли групп (Отлично/Хорошо/Удовлетворительно) настраиваются при
+     создании комнаты: преднастройки «Злой» 30/30/40, «Нормальный»
+     40/40/20, «Добрый» 50/40/10 или своя комбинация с точностью до 10 %.
+   — Режим команд: при создании задаётся размер команды; на старте
+     первого раунда студенты раскидываются по командам в порядке входа,
+     вновь входящие занимают свободные места (иначе — новая команда).
+     Баллы команды = сумма баллов участников; группы распределяются
+     между КОМАНДАМИ по тем же долям; дополнительно показывается
+     таблица команд.
    ===================================================================== */
 
 const $ = function (id) { return document.getElementById(id); };
@@ -46,6 +55,7 @@ const seenStudents = new Map();// файл -> sid (чтобы уметь уда�
 const seenAnswerFiles = new Set();
 let answersByRound = {};       // номер раунда -> sid -> {name, answer, elapsed, skip}
 let bonusesCache = {};         // sid -> файл бонусов {double, triple, time, used[]}
+let teamsPutTimer = null;      // отложенная запись распределения по командам
 let screen = 'stats';
 let roundBoxOn = false;        // встроенная панель раунда показана
 let pollInt = null;
@@ -182,6 +192,15 @@ function renderStats() {
 
     const body = document.createElement('div');
     body.className = 'rec-body hidden';
+    if (Array.isArray(rec.teams) && rec.teams.length) {
+      const tcap = document.createElement('div');
+      tcap.className = 'podium-cap';
+      tcap.textContent = 'Таблица команд';
+      const tbox = document.createElement('div');
+      tbox.appendChild(buildTeamsTable(rec.teams));
+      body.appendChild(tcap);
+      body.appendChild(tbox);
+    }
     const table = document.createElement('table');
     table.innerHTML = '<thead><tr><th>Место</th><th>Студент</th><th>Очки</th><th>Серия</th>' +
       '<th>Верно</th><th>Неверно</th><th>Пропуски</th><th>Время</th><th>Балл</th><th>Группа</th></tr></thead>';
@@ -266,6 +285,9 @@ async function createRoom() {
   const wanted = safeRoom($('room-id').value);
   const pass = $('teacher-pass').value.trim();
   auth = pass ? 'Basic ' + btoa('teacher:' + pass) : null;
+  /* настройки долей групп и режима команд (проверка — до блокировки кнопки) */
+  const cfg = readRoomConfig();
+  if (!cfg) return;
   $('btn-open').disabled = true;
   try {
     await syncClock();
@@ -283,10 +305,11 @@ async function createRoom() {
       while (st); // автокод ищем, пока не попадём на свободный
     }
     if (!st) {
-      state = { status: 'lobby', round: 0, topic: 'Тестирование студентов', created: new Date().toISOString() };
+      state = { status: 'lobby', round: 0, topic: 'Тестирование студентов', created: new Date().toISOString(),
+        groups: cfg.groups, teamMode: cfg.teamMode, teamSize: cfg.teamSize, teams: [] };
       await apiPut('rooms/' + room + '.json', state, auth);
     } else {
-      state = st; // возобновляем незавершённую комнату
+      state = st; // возобновляем незавершённую комнату (настройки — из её состояния)
     }
     $('room-id').value = '';
     localStorage.setItem('blitz_teach_room', room);
@@ -349,6 +372,161 @@ $('in-topic').addEventListener('change', async function () {
   try { await apiPut('rooms/' + room + '.json', state, auth); } catch (e) { /* повторим позже */ }
 });
 
+/* ---------------- доли групп и команды ---------------- */
+
+/* Чтение настроек из карточки «Создать комнату».
+   Возвращает null, если настройка некорректна (ошибка уже показана). */
+function readRoomConfig() {
+  const sel = document.querySelector('input[name="shares"]:checked');
+  let groups = { gold: 50, silver: 30, bronze: 20 };
+  if (sel && sel.value === 'custom') {
+    const p = [+$('sh-g').value || 0, +$('sh-s').value || 0, +$('sh-b').value || 0];
+    if (p[0] + p[1] + p[2] !== 100) {
+      alert('Доли групп должны давать ровно 100 % с точностью до 10 %.\nСейчас: ' + p.join(' + ') + ' = ' + (p[0] + p[1] + p[2]) + ' %.');
+      return null;
+    }
+    groups = { gold: p[0], silver: p[1], bronze: p[2] };
+  } else if (sel && sel.value) {
+    const p = sel.value.split(',').map(function (v) { return +v; });
+    groups = { gold: p[0], silver: p[1], bronze: p[2] };
+  }
+  const teamMode = $('team-mode').checked;
+  let teamSize = 0;
+  if (teamMode) {
+    teamSize = Math.floor(+$('team-size').value || 0);
+    if (teamSize < 1 || teamSize > 20) {
+      alert('В команде должно быть от 1 до 20 человек.');
+      return null;
+    }
+  }
+  return { groups: groups, teamMode: teamMode, teamSize: teamSize };
+}
+
+function currentShares() {
+  const g = (state && state.groups) || null;
+  return g ? [g.gold, g.silver, g.bronze] : null;
+}
+
+function sharesLabel() {
+  const g = (state && state.groups) || { gold: 50, silver: 30, bronze: 20 };
+  const key = [g.gold, g.silver, g.bronze].join(',');
+  const name = key === '30,30,40' ? ' («Злой»)' : key === '40,40,20' ? ' («Нормальный»)' : key === '50,40,10' ? ' («Добрый»)' : ' (своя)';
+  return g.gold + ' / ' + g.silver + ' / ' + g.bronze + ' %' + name;
+}
+
+function placeStudent(teams, sid, size) {
+  for (const t of teams) {
+    if ((t.sids || []).length < size) { t.sids.push(sid); return; }
+  }
+  teams.push({ name: 'Команда ' + (teams.length + 1), sids: [sid] });
+}
+
+/* Первое распределение по командам — на старте первого раунда,
+   в порядке входа студентов (по времени регистрации). */
+function buildTeams() {
+  const size = Math.max(1, +state.teamSize || 3);
+  const sids = Object.keys(students).sort(function (a, b) {
+    const ta = students[a].at || '', tb = students[b].at || '';
+    if (ta !== tb) return ta < tb ? -1 : 1;
+    return (students[a].name || '').localeCompare(students[b].name || '');
+  });
+  const teams = [];
+  sids.forEach(function (sid) { placeStudent(teams, sid, size); });
+  return teams;
+}
+
+/* Вновь вошедший студент (когда раунды уже начались) занимает свободное
+   место в первой неполной команде; если мест нет — создаётся новая. */
+function assignTeam(sid) {
+  if (!state || !state.teamMode || !students[sid]) return;
+  if ((state.round || 0) < 1) return;                  // раунды ещё не начались
+  if (!Array.isArray(state.teams)) state.teams = [];
+  if (state.teams.some(function (t) { return (t.sids || []).indexOf(sid) !== -1; })) return;
+  const size = Math.max(1, +state.teamSize || 3);
+  placeStudent(state.teams, sid, size);
+  scheduleTeamsSave();
+}
+
+let teamsSaveBusy = false;
+function scheduleTeamsSave() {
+  clearTimeout(teamsPutTimer);
+  teamsPutTimer = setTimeout(async function () {
+    if (teamsSaveBusy || !room || !state) return;
+    teamsSaveBusy = true;
+    try { await apiPut('rooms/' + room + '.json', state, auth); } catch (e) { /* повторим */ }
+    teamsSaveBusy = false;
+  }, 700);
+}
+
+/* Таблица команд: место, название, баллы (сумма участников), группа */
+function buildTeamsTable(teamRows) {
+  const table = document.createElement('table');
+  table.innerHTML = '<thead><tr><th>Место</th><th>Команда</th><th>Очки команды</th><th>Участников</th><th>Группа</th></tr></thead>';
+  const tb = document.createElement('tbody');
+  (teamRows || []).forEach(function (r, i) {
+    const tr = document.createElement('tr');
+    if (r.place <= 3) tr.className = 'top' + r.place;
+    const tdP = document.createElement('td');
+    const pl = document.createElement('span');
+    pl.className = 'place' + (r.place <= 3 ? ' m' + r.place : '');
+    pl.textContent = r.place || (i + 1);
+    tdP.appendChild(pl);
+    tr.appendChild(tdP);
+    [r.name, String(r.points || 0), String(r.members != null ? r.members : (r.sids || []).length)]
+      .forEach(function (v) {
+        const td = document.createElement('td');
+        td.textContent = v;
+        tr.appendChild(td);
+      });
+    const tdG = document.createElement('td');
+    const chip = document.createElement('span');
+    chip.className = 'chip g' + ((r.group || 0) + 1);
+    chip.textContent = GROUP_NAMES[r.group || 0];
+    tdG.appendChild(chip);
+    tr.appendChild(tdG);
+    tb.appendChild(tr);
+  });
+  table.appendChild(tb);
+  return table;
+}
+
+function renderTeamsTableInto(boxId, teamRows) {
+  const box = $(boxId);
+  box.textContent = '';
+  box.appendChild(buildTeamsTable(teamRows));
+}
+
+/* В режиме команд группа студента = группа его команды (везде одинаково) */
+function applyTeamGroups(rows, teamRows) {
+  if (!(state && state.teamMode) || !(teamRows || []).length) return rows;
+  rows.forEach(function (r) {
+    const tr = teamRows.find(function (tm) { return (tm.sids || []).indexOf(r.sid) !== -1; });
+    if (tr) r.group = tr.group;
+  });
+  return rows;
+}
+
+/* Настройки «Создать комнату»: преднастройки долей, «своя», режим команд */
+(function initCreateForm() {
+  const opts = [];
+  for (let v = 0; v <= 100; v += 10) opts.push('<option value="' + v + '">' + v + ' %</option>');
+  ['sh-g', 'sh-s', 'sh-b'].forEach(function (id) {
+    const s = $(id);
+    if (s) s.innerHTML = opts.join('');
+  });
+  if ($('sh-g')) { $('sh-g').value = '40'; $('sh-s').value = '40'; $('sh-b').value = '20'; }
+  document.querySelectorAll('input[name="shares"]').forEach(function (r) {
+    r.addEventListener('change', function () {
+      $('shares-custom').classList.toggle('hidden', !(r.checked && r.value === 'custom'));
+    });
+  });
+  if ($('team-mode')) {
+    $('team-mode').addEventListener('change', function () {
+      $('team-size-wrap').classList.toggle('hidden', !$('team-mode').checked);
+    });
+  }
+})();
+
 /* ---------------- фоновый опрос ---------------- */
 
 async function tick() {
@@ -391,9 +569,10 @@ async function pollStudents() {
       const d = await apiGet('students/' + room + '/' + f);
       const sid = f.replace(/\.json$/, '');
       if (d && d.name) {
-        students[d.sid || sid] = { name: d.name };
+        students[d.sid || sid] = { name: d.name, at: d.at || '' };
         seenStudents.set(f, d.sid || sid);
         loadBonus(sid);
+        assignTeam(sid);   // режим команд: новый студент занимает место
       }
     } catch (e) { /* пропускаем битый файл */ }
   }
@@ -492,6 +671,14 @@ async function deleteStudent(sid) {
   } catch (e) { /* файла могло уже не быть */ }
   delete students[sid];
   seenStudents.delete(sid + '.json');
+  if (state && Array.isArray(state.teams)) {
+    let touched = false;
+    state.teams.forEach(function (tm) {
+      const i = (tm.sids || []).indexOf(sid);
+      if (i !== -1) { tm.sids.splice(i, 1); touched = true; }
+    });
+    if (touched) scheduleTeamsSave();
+  }
   if (lastResults && lastResults.scores && lastResults.scores[sid]) {
     delete lastResults.scores[sid];
     try { await apiPut('results/' + room + '.json', lastResults, auth); } catch (e) { /* не критично */ }
@@ -510,6 +697,10 @@ $('btn-del-all').addEventListener('click', async function () {
     delete students[sid];
     seenStudents.delete(sid + '.json');
   }
+  if (state && Array.isArray(state.teams)) {
+    state.teams.forEach(function (tm) { tm.sids = []; });
+    scheduleTeamsSave();
+  }
   if (lastResults && lastResults.scores) {
     Object.keys(lastResults.scores).forEach(function (sid) {
       if (!students[sid]) delete lastResults.scores[sid];
@@ -524,8 +715,20 @@ function renderLobby() {
   const base = location.href.replace(/teacher\.html.*$/, '');
   $('stu-link').value = base + 'index.html#' + room;
   renderStudents();
+  $('room-config').textContent = 'Группы итогов: ' + sharesLabel() +
+    (state && state.teamMode ? ' · Режим команд: по ' + (+state.teamSize || 3) + ' чел.' : '');
+  // таблица команд — дополнительно к таблице студентов
+  const tRows = (state && state.teamMode)
+    ? rankTeams(lastResults ? lastResults.scores : {}, state.teams, currentShares()) : [];
+  const tw = $('lobby-teams-wrap');
+  if (tRows.length) {
+    tw.classList.remove('hidden');
+    renderTeamsTableInto('lobby-teams', tRows);
+  } else {
+    tw.classList.add('hidden');
+  }
   // таблица результатов видна ВСЕГДА (обновляется после каждого раунда)
-  const rows = lastResults ? rankFromScores(lastResults.scores) : [];
+  const rows = applyTeamGroups(lastResults ? rankFromScores(lastResults.scores, currentShares()) : [], tRows);
   const wrap = $('lobby-table-wrap');
   if (rows.length) {
     wrap.classList.remove('hidden');
@@ -559,6 +762,10 @@ $('btn-text').addEventListener('click', function () { startRound('text'); });
 async function startRound(type) {
   const duration = type === 'choice' ? CHOICE_SECONDS : TEXT_SECONDS;
   const next = (state.round || 0) + 1;
+  // режим команд: первое распределение — на старте первого раунда
+  if (state.teamMode && !(Array.isArray(state.teams) && state.teams.length)) {
+    state.teams = buildTeams();
+  }
   const st = {
     status: 'active',
     round: next,
@@ -566,7 +773,11 @@ async function startRound(type) {
     duration: duration,
     topic: state.topic || 'Тестирование студентов',
     startedAt: serverNow(),
-    lastCorrect: null
+    lastCorrect: null,
+    groups: state.groups || { gold: 50, silver: 30, bronze: 20 },
+    teamMode: !!state.teamMode,
+    teamSize: +state.teamSize || 0,
+    teams: state.teams || []
   };
   try {
     await apiPut('rooms/' + room + '.json', st, auth);
@@ -673,8 +884,18 @@ function renderRound() {
   // кнопка «Нет правильного ответа» доступна в любом режиме (варианты и текст),
   // пока раунд не проверен
   $('btn-skip').disabled = judged;
+  // таблица команд — над таблицей студентов
+  const tRows = (state && state.teamMode)
+    ? rankTeams(lastResults ? lastResults.scores : {}, state.teams, currentShares()) : [];
+  const tWrap = $('round-teams-wrap');
+  if (tRows.length) {
+    tWrap.classList.remove('hidden');
+    renderTeamsTableInto('round-teams', tRows);
+  } else {
+    tWrap.classList.add('hidden');
+  }
   // таблица результатов — всегда под ответами
-  const rows = lastResults ? rankFromScores(lastResults.scores) : [];
+  const rows = applyTeamGroups(lastResults ? rankFromScores(lastResults.scores, currentShares()) : [], tRows);
   const wrap = $('round-table-wrap');
   if (rows.length) {
     wrap.classList.remove('hidden');
@@ -897,7 +1118,21 @@ async function finish() {
       res.finished = true;
       res.topic = state.topic || 'Тестирование студентов';
       res.finishedAt = new Date().toISOString();
-      res.standings = rankFromScores(res.scores || {});
+      res.standings = rankFromScores(res.scores || {}, currentShares());
+      // режим команд: баллы и группы команд; у студентов группа — от команды
+      res.teams = (state && state.teamMode)
+        ? rankTeams(res.scores || {}, state.teams, currentShares()) : [];
+      if (res.teams.length) {
+        res.standings.forEach(function (row) {
+          const tr = res.teams.find(function (tm) { return (tm.sids || []).indexOf(row.sid) !== -1; });
+          if (tr) {
+            row.group = tr.group;
+            row.team = tr.name;
+            row.teamPlace = tr.place;
+            row.teamPoints = tr.points;
+          }
+        });
+      }
       res.updated = res.finishedAt;
       await apiPut('results/' + r + '.json', res, auth);
       lastResults = res;
@@ -911,6 +1146,9 @@ async function finish() {
         topic: res.topic,
         room: r,
         rounds: (res.rounds || []).length,
+        teams: (res.teams || []).map(function (tm) {
+          return { name: tm.name, points: tm.points, members: tm.members, place: tm.place, group: tm.group };
+        }),
         students: res.standings.map(function (row) {
           return {
             name: row.name, points: row.points, correct: row.correct, wrong: row.wrong,
@@ -977,18 +1215,42 @@ function renderFinal() {
     '» · комната ' + room + ' · раундов: ' +
     ((lastResults && lastResults.rounds) ? lastResults.rounds.length : 0);
   // полная итоговая таблица результатов
-  const rows = lastResults ? rankFromScores(lastResults.scores) : [];
+  const rows = lastResults ? rankFromScores(lastResults.scores, currentShares()) : [];
+  const tw = $('final-teams-wrap');
+  if (state && state.teamMode) {
+    const tRows = rankTeams(lastResults ? lastResults.scores : {}, state.teams, currentShares());
+    tw.classList.toggle('hidden', !tRows.length);
+    if (tRows.length) renderTeamsTableInto('final-teams', tRows);
+    applyTeamGroups(rows, tRows);
+  } else {
+    tw.classList.add('hidden');
+  }
   renderTableInto('final-table', rows);
 }
 
 $('btn-csv').addEventListener('click', function () {
-  const rows = lastResults ? rankFromScores(lastResults.scores) : [];
+  const rows = lastResults ? rankFromScores(lastResults.scores, currentShares()) : [];
   if (!rows.length) return;
   const head = ['Место', 'Студент', 'Очки', 'Серия', 'Верно', 'Неверно', 'Пропуски', 'Время (с)', 'Балл', 'Группа'];
   const lines = [head.join(';')].concat(rows.map(function (r) {
     return [r.place, r.name, r.points, r.streak || 0, r.correct, r.wrong, r.skip || 0,
       Math.round(r.time), r.score, GROUP_NAMES[r.group]].join(';');
   }));
+  // режим команд: группы студентов — от их команды
+  if (state && state.teamMode && lastResults && Array.isArray(lastResults.teams) && lastResults.teams.length) {
+    rows.forEach(function (r) {
+      const tm = lastResults.teams.find(function (t2) { return (t2.sids || []).indexOf(r.sid) !== -1; });
+      if (tm) r.group = tm.group;
+    });
+  }
+  // режим команд: дополнительно блок команд
+  if (state && state.teamMode && lastResults && Array.isArray(lastResults.teams) && lastResults.teams.length) {
+    lines.push('');
+    lines.push(['Команда', 'Очки', 'Участников', 'Место', 'Группа'].join(';'));
+    lastResults.teams.forEach(function (tm) {
+      lines.push([tm.name, tm.points, tm.members, tm.place, GROUP_NAMES[tm.group]].join(';'));
+    });
+  }
   const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);

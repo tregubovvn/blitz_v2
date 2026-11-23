@@ -27,6 +27,34 @@
         <input type="password" id="teacher-pass" autocomplete="off">
       </div>
     </div>
+    <label>Группы итогов — Отлично · Хорошо · Удовлетворительно (доли по 10 %)</label>
+    <div class="row" style="gap:14px;flex-wrap:wrap">
+      <label class="preset"><input type="radio" name="shares" value="30,30,40"> Злой — 30/30/40</label>
+      <label class="preset"><input type="radio" name="shares" value="40,40,20" checked> Нормальный — 40/40/20</label>
+      <label class="preset"><input type="radio" name="shares" value="50,40,10"> Добрый — 50/40/10</label>
+      <label class="preset"><input type="radio" name="shares" value="custom"> Своя…</label>
+    </div>
+    <div class="row hidden" id="shares-custom" style="gap:12px;margin-top:8px">
+      <div style="flex:0 0 140px">
+        <label for="sh-g">Отлично, %</label>
+        <select id="sh-g"></select>
+      </div>
+      <div style="flex:0 0 140px">
+        <label for="sh-s">Хорошо, %</label>
+        <select id="sh-s"></select>
+      </div>
+      <div style="flex:0 0 160px">
+        <label for="sh-b">Удовлетворительно, %</label>
+        <select id="sh-b"></select>
+      </div>
+    </div>
+    <div class="row" style="gap:14px;margin-top:10px">
+      <label class="preset"><input type="checkbox" id="team-mode"> Режим команд</label>
+      <div class="grow hidden" id="team-size-wrap">
+        <label for="team-size">Человек в команде</label>
+        <input type="text" inputmode="numeric" id="team-size" value="3" maxlength="2" autocomplete="off">
+      </div>
+    </div>
     <div class="row" style="margin-top:16px">
       <button id="btn-open">Создать комнату</button>
     </div>
@@ -55,6 +83,7 @@
 
     <label for="in-topic">Название темы (попадёт в статистику)</label>
     <input type="text" id="in-topic" maxlength="120" value="Тестирование студентов" autocomplete="off">
+    <p class="muted" id="room-config" style="font-size:13px;margin:8px 0 0"></p>
 
 
 
@@ -70,6 +99,11 @@
 
 
     
+    <div id="lobby-teams-wrap" class="hidden" style="margin-top:22px;border-top:1px solid var(--line);padding-top:18px">
+      <div class="podium-cap">Таблица команд (баллы команды — сумма баллов участников)</div>
+      <div id="lobby-teams"></div>
+    </div>
+
     <div id="lobby-table-wrap" class="hidden" style="margin-top:22px;border-top:1px solid var(--line);padding-top:18px">
       <div class="podium-cap">Таблица результатов (обновляется после каждого раунда)</div>
       <div id="lobby-table"></div>
@@ -103,6 +137,11 @@
         <p class="muted" style="font-size:13px;margin:8px 0 0">Через несколько секунд студенты вернутся в режим ожидания следующего вопроса.</p>
       </div>
 
+      <div id="round-teams-wrap" class="hidden" style="margin-top:20px">
+        <div class="podium-cap">Таблица команд</div>
+        <div id="round-teams"></div>
+      </div>
+
       <div id="round-table-wrap" class="hidden" style="margin-top:20px">
         <div class="podium-cap">Таблица результатов</div>
         <div id="round-table"></div>
@@ -134,6 +173,11 @@
     <p class="muted">Результаты всех студентов сохранены в статистике на первой странице
     преподавателя. Комната закрыта и удалена — войти в неё снова нельзя,
     пока вы не создадите её заново.</p>
+    <div id="final-teams-wrap" class="hidden">
+      <div class="podium-cap">Итоговая таблица команд</div>
+      <div id="final-teams"></div>
+    </div>
+
     <div class="podium-cap">Полная итоговая таблица результатов</div>
     <div id="final-table"></div>
     <div class="row" style="margin-top:16px">
