@@ -295,9 +295,15 @@ async function createRoom() {
     if (wanted) {
       st = await apiGet('rooms/' + wanted + '.json', auth);
       if (st && st.status === 'done') {
-        alert('Комната ' + wanted + ' уже использована для теста.\nКаждая комната работает только на один тест — введите другой код.');
-        $('btn-open').disabled = false;
-        return;
+        if (!confirm('Комната ' + wanted + ' уже использована для теста.\n' +
+          'Все её данные на сервере будут удалены, и она будет создана заново с этим кодом.\n\n' +
+          'Продолжить?')) {
+          alert('Каждая комната работает только на один тест — введите другой код.');
+          $('btn-open').disabled = false;
+          return;
+        }
+        await cleanupRoom(wanted);   // старые данные удалены — код свободен
+        st = null;
       }
       room = wanted;
     } else {
@@ -333,10 +339,31 @@ function enterLobby() {
   tick();
 }
 
+/* ---------------- уборка брошенных комнат ----------------
+   Данные комнаты удаляются в браузере через ~10 секунд после «Завершить
+   тест» (чтобы студенты успели прочитать итоги). Если вкладку закрыли
+   раньше — файлы остаются на сервере. При каждом открытии панели находим
+   комнаты в статусе «done» (уже сохранены в статистике и больше не нужны)
+   и удаляем их вместе со всеми данными: студенты, ответы, бонусы,
+   результаты и сам файл комнаты. */
+async function janitorSweep() {
+  let files = [];
+  try { files = await apiList('rooms'); } catch (e) { return; }
+  for (const f of files) {
+    try {
+      const st = await apiGet('rooms/' + f, auth);
+      if (st && st.status === 'done') {
+        await cleanupRoom(f.replace(/\.json$/, ''));
+      }
+    } catch (e) { /* пропускаем недоступную комнату */ }
+  }
+}
+
 /* Автовозобновление: если панель случайно закрыли посреди теста */
 (async function initTeacher() {
   show('sec-stats');
   loadStats();
+  janitorSweep();   // удалить остатки завершённых комнат (если вкладку закрыли раньше)
   const saved = localStorage.getItem('blitz_teach_room');
   if (!saved) return;
   try {
@@ -1194,18 +1221,19 @@ async function finish() {
    результаты и сам файл комнаты. */
 async function cleanupRoom(r) {
   const rm = function (p) { return apiDelete(p, auth).catch(function () { /* нет файла — ок */ }); };
-  try {
-    const stu = await apiList('students/' + r);
-    for (const f of stu) await rm('students/' + r + '/' + f);
-  } catch (e) { /* нет каталога — ок */ }
-  try {
-    const ans = await apiList('answers/' + r);
-    for (const f of ans) await rm('answers/' + r + '/' + f);
-  } catch (e) { /* нет каталога — ок */ }
-  try {
-    const bo = await apiList('bonuses/' + r);
-    for (const f of bo) await rm('bonuses/' + r + '/' + f);
-  } catch (e) { /* нет каталога — ок */ }
+  /* каталог удаляем файлами пачками параллельно: у большой комнаты сотни
+     файлов, по одному это занимает минуты */
+  const wipe = async function (dir) {
+    try {
+      const files = await apiList(dir);
+      for (let i = 0; i < files.length; i += 12) {
+        await Promise.all(files.slice(i, i + 12).map(function (f) { return rm(dir + '/' + f); }));
+      }
+    } catch (e) { /* нет каталога — ок */ }
+  };
+  await wipe('students/' + r);
+  await wipe('answers/' + r);
+  await wipe('bonuses/' + r);
   await rm('results/' + r + '.json');
   await rm('rooms/' + r + '.json'); // после этого вход в комнату невозможен
 }
