@@ -441,11 +441,16 @@ function sharesLabel() {
   return g.gold + ' / ' + g.silver + ' / ' + g.bronze + ' %' + name;
 }
 
-function placeStudent(teams, sid, size) {
+function placeStudent(teams, sid, name, size) {
   for (const t of teams) {
-    if ((t.sids || []).length < size) { t.sids.push(sid); return; }
+    if ((t.sids || []).length < size) {
+      t.sids.push(sid);
+      if (!Array.isArray(t.names)) t.names = [];
+      t.names.push(name || sid);
+      return;
+    }
   }
-  teams.push({ name: 'Команда ' + (teams.length + 1), sids: [sid] });
+  teams.push({ name: 'Команда ' + (teams.length + 1), sids: [sid], names: [name || sid] });
 }
 
 /* Первое распределение по командам — на старте первого раунда,
@@ -458,7 +463,7 @@ function buildTeams() {
     return (students[a].name || '').localeCompare(students[b].name || '');
   });
   const teams = [];
-  sids.forEach(function (sid) { placeStudent(teams, sid, size); });
+  sids.forEach(function (sid) { placeStudent(teams, sid, students[sid].name, size); });
   return teams;
 }
 
@@ -470,7 +475,7 @@ function assignTeam(sid) {
   if (!Array.isArray(state.teams)) state.teams = [];
   if (state.teams.some(function (t) { return (t.sids || []).indexOf(sid) !== -1; })) return;
   const size = Math.max(1, +state.teamSize || 3);
-  placeStudent(state.teams, sid, size);
+  placeStudent(state.teams, sid, students[sid].name, size);
   scheduleTeamsSave();
 }
 
@@ -702,7 +707,11 @@ async function deleteStudent(sid) {
     let touched = false;
     state.teams.forEach(function (tm) {
       const i = (tm.sids || []).indexOf(sid);
-      if (i !== -1) { tm.sids.splice(i, 1); touched = true; }
+      if (i !== -1) {
+        tm.sids.splice(i, 1);
+        if (Array.isArray(tm.names)) tm.names.splice(i, 1);
+        touched = true;
+      }
     });
     if (touched) scheduleTeamsSave();
   }
@@ -725,7 +734,7 @@ $('btn-del-all').addEventListener('click', async function () {
     seenStudents.delete(sid + '.json');
   }
   if (state && Array.isArray(state.teams)) {
-    state.teams.forEach(function (tm) { tm.sids = []; });
+    state.teams.forEach(function (tm) { tm.sids = []; tm.names = []; });
     scheduleTeamsSave();
   }
   if (lastResults && lastResults.scores) {

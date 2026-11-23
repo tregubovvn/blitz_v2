@@ -243,6 +243,7 @@ function sharesFromState() {
 
 /* Чип команды в личной панели: название, баллы команды и её место */
 function renderTeamChip() {
+  renderTeamMembers();   // ФИО состава команды (если режим команд)
   const chip = $('p-team');
   if (!chip) return;
   if (!(state && state.teamMode)) { chip.classList.add('hidden'); return; }
@@ -258,6 +259,28 @@ function renderTeamChip() {
   chip.textContent = mine
     ? mine.name + ' · ' + mine.points + ' очк. · ' + mine.place + ' место из ' + rows.length
     : 'Ищем вам команду…';
+}
+
+/* ФИО состава своей команды (режим команд). Имена хранятся в составе
+   команды (names рядом с sids); для комнат без имён — подставляем из
+   результатов по sid. */
+function renderTeamMembers() {
+  const box = $('p-team-members');
+  if (!box) return;
+  if (!(state && state.teamMode) || (state.round || 0) < 1 || !(state.teams || []).length) {
+    box.classList.add('hidden');
+    box.textContent = '';
+    return;
+  }
+  const mine = (state.teams || []).find(function (t) { return (t.sids || []).indexOf(sid) !== -1; });
+  if (!mine) { box.classList.add('hidden'); box.textContent = ''; return; }
+  const names = (mine.sids || []).map(function (s2, i) {
+    if (Array.isArray(mine.names) && mine.names[i]) return mine.names[i];
+    const sc = lastResults && lastResults.scores && lastResults.scores[s2];
+    return (sc && sc.name) || null;
+  }).filter(Boolean);
+  box.classList.remove('hidden');
+  box.textContent = 'Команда «' + mine.name + '»: ' + (names.length ? names.join(', ') : '—');
 }
 
 /* ---------------- личная панель (всегда видна после входа) ---------------- */
@@ -278,11 +301,11 @@ function renderPersonal() {
 
   renderTeamChip();   // чип команды (режим команд)
 
-  // тройка лидеров
+  // тройка лидеров — по набранным очкам (не по итоговому баллу)
   const pod = $('p-podium');
   pod.textContent = '';
   const cls = ['p1', 'p2', 'p3'];
-  const top = rows.slice(0, 3);
+  const top = topByPoints(lastResults ? lastResults.scores : {}, 3);
   if (!top.length) {
     const d = document.createElement('div');
     d.className = 'muted';
@@ -625,7 +648,7 @@ function renderFinalScreen(rows) {
   const box = $('final-top3');
   box.textContent = '';
   const cls = ['p1', 'p2', 'p3'];
-  const top = rows.slice(0, 3);
+  const top = rankByPoints(rows).slice(0, 3);
   if (!top.length) {
     const d = document.createElement('div');
     d.className = 'muted';

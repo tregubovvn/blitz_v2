@@ -284,6 +284,28 @@ function rankFromScores(scores, shares) {
   return rows;
 }
 
+/* Сортировка строк по НАБРАННЫМ ОЧКАМ (не по итоговому баллу):
+   очки ↓, при равенстве — меньше времени, затем по ФИО. */
+function rankByPoints(rows) {
+  return (rows || []).slice().sort(function (a, b) {
+    return (+b.points || 0) - (+a.points || 0) ||
+      (+a.time || 0) - (+b.time || 0) ||
+      String(a.name || '').localeCompare(String(b.name || ''));
+  });
+}
+
+/* Тройка лидеров по очкам из карты scores{sid: {name, points, time, score}} */
+function topByPoints(scores, n) {
+  const rows = Object.keys(scores || {}).map(function (sid) {
+    const s = scores[sid] || {};
+    return {
+      sid: sid, name: s.name || sid, points: +s.points || 0,
+      time: +s.time || 0, score: s.score
+    };
+  });
+  return rankByPoints(rows).slice(0, n || 3);
+}
+
 /* Рейтинг команд (режим команд): баллы команды = сумма баллов участников.
    Сортировка по очкам; группы (Золото/Серебро/Бронза) распределяются по
    тем же долям, что и у студентов, но применённым к числу КОМАНД. */
