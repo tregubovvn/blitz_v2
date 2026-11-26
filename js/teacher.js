@@ -505,12 +505,32 @@ function buildTeamsTable(teamRows) {
     pl.textContent = r.place || (i + 1);
     tdP.appendChild(pl);
     tr.appendChild(tdP);
-    [r.name, String(r.points || 0), String(r.members != null ? r.members : (r.sids || []).length)]
-      .forEach(function (v) {
-        const td = document.createElement('td');
-        td.textContent = v;
-        tr.appendChild(td);
-      });
+    /* команда: название + список участников (ФИО) */
+    const tdN = document.createElement('td');
+    const nm = document.createElement('b');
+    nm.textContent = r.name;
+    tdN.appendChild(nm);
+    const namesList = Array.isArray(r.names) ? r.names : null;
+    if (namesList && namesList.length) {
+      const dl = document.createElement('div');
+      dl.className = 'names';
+      dl.textContent = namesList.join(', ');
+      tdN.appendChild(dl);
+    }
+    tr.appendChild(tdN);
+    /* очки команды: сумма участников; если есть компенсация — показать её */
+    const tdPts = document.createElement('td');
+    tdPts.textContent = String(r.points || 0);
+    if (r.bonus) {
+      const bn = document.createElement('div');
+      bn.className = 'names';
+      bn.textContent = '(в т.ч. ' + r.bonus + ' за отсутствующих)';
+      tdPts.appendChild(bn);
+    }
+    tr.appendChild(tdPts);
+    const tdM = document.createElement('td');
+    tdM.textContent = String(r.members != null ? r.members : (r.sids || []).length);
+    tr.appendChild(tdM);
     const tdG = document.createElement('td');
     const chip = document.createElement('span');
     chip.className = 'chip g' + ((r.group || 0) + 1);
@@ -1224,7 +1244,10 @@ async function finish() {
         room: r,
         rounds: (res.rounds || []).length,
         teams: (res.teams || []).map(function (tm) {
-          return { name: tm.name, points: tm.points, members: tm.members, place: tm.place, group: tm.group };
+          return {
+            name: tm.name, points: tm.points, members: tm.members, place: tm.place, group: tm.group,
+            names: tm.names || [], bonus: tm.bonus || 0
+          };
         }),
         students: res.standings.map(function (row) {
           return {
@@ -1324,9 +1347,10 @@ $('btn-csv').addEventListener('click', function () {
   // режим команд: дополнительно блок команд
   if (state && state.teamMode && lastResults && Array.isArray(lastResults.teams) && lastResults.teams.length) {
     lines.push('');
-    lines.push(['Команда', 'Очки', 'Участников', 'Место', 'Группа'].join(';'));
+    lines.push(['Команда', 'Очки', 'Компенсация', 'Участников', 'Состав', 'Место', 'Группа'].join(';'));
     lastResults.teams.forEach(function (tm) {
-      lines.push([tm.name, tm.points, tm.members, tm.place, GROUP_NAMES[tm.group]].join(';'));
+      lines.push([tm.name, tm.points, tm.bonus || 0, tm.members,
+        (tm.names || []).join(', '), tm.place, GROUP_NAMES[tm.group]].join(';'));
     });
   }
   const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });

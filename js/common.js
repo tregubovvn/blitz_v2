@@ -307,18 +307,39 @@ function topByPoints(scores, n) {
 }
 
 /* Рейтинг команд (режим команд): баллы команды = сумма баллов участников.
-   Сортировка по очкам; группы (Золото/Серебро/Бронза) распределяются по
-   тем же долям, что и у студентов, но применённым к числу КОМАНД. */
+   Если в команде меньше участников, чем в самой большой (обычно последняя,
+   неполная), за КАЖДОГО отсутствующего игрока добавляется СРЕДНИЙ балл
+   участников этой же команды — составы разной длины становятся сопоставимы.
+   Сортировка по итоговым очкам; группы (Золото/Серебро/Бронза) — по тем же
+   долям, что и у студентов, но применённым к числу КОМАНД. */
 function rankTeams(scores, teams, shares) {
   const rows = (teams || []).map(function (t) {
     const sids = t.sids || [];
+    const names = sids.map(function (sid, i) {
+      if (Array.isArray(t.names) && t.names[i]) return t.names[i];
+      const s = (scores || {})[sid];
+      return (s && s.name) || sid;
+    });
     const pts = sids.reduce(function (a, sid) {
       const s = (scores || {})[sid];
       return a + (s ? (+s.points || 0) : 0);
     }, 0);
-    return { name: t.name, sids: sids, members: sids.length, points: pts };
+    return {
+      name: t.name, sids: sids, names: names, members: sids.length,
+      basePoints: pts, bonus: 0, points: pts
+    };
   });
   if (!rows.length) return [];
+  /* неполным командам — средний балл за каждого отсутствующего игрока */
+  const maxSize = Math.max.apply(null, rows.map(function (r) { return r.members; }));
+  rows.forEach(function (r) {
+    if (r.members > 0 && r.members < maxSize) {
+      const avg = r.basePoints / r.members;
+      const missing = maxSize - r.members;
+      r.bonus = Math.round(avg * missing * 10) / 10;
+      r.points = Math.round((r.basePoints + r.bonus) * 10) / 10;
+    }
+  });
   rows.sort(function (a, b) {
     return b.points - a.points || a.name.localeCompare(b.name);
   });
